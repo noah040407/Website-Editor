@@ -1,0 +1,974 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <title>Overlay Steuerung mit Win-Challenge</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      display: flex;
+      font-family: sans-serif;
+      user-select: none;
+    }
+    #sidebar {
+      width: 220px;
+      background: #f0f0f0;
+      padding: 10px;
+      border-right: 1px solid #ccc;
+    }
+    #editor-area {
+      flex: 1;
+      position: relative;
+      background: #eaeaea;
+      display: flex;
+      justify-content: center;
+      align-items: start;
+      padding: 0;
+      overflow: hidden;
+      height: 1080px;
+    }
+    #overlay-frame {
+      position: relative;
+      width: 1920px;
+      height: 1080px;
+      background: white;
+      border: 2px dashed #333;
+      box-shadow: 0 0 8px rgba(0,0,0,0.3);
+      overflow: visible;
+    }
+    .text-box {
+      position: absolute;
+      font-size: 1.5em;
+      padding: 4px 8px;
+      border: 1px solid #888;
+      color: black;
+      outline: none;
+      cursor: move;
+      background: white;
+      user-select: text;
+      min-width: 100px;
+      min-height: 30px;
+      resize: none;
+      overflow: hidden;
+      white-space: pre-wrap;
+    }
+    .selected {
+      border: 2px solid red !important;
+    }
+    button {
+      width: 100%;
+      margin-top: 10px;
+      cursor: pointer;
+    }
+    input[type="file"] {
+      width: 100%;
+      margin-top: 10px;
+    }
+    .text-controls {
+      display: flex;
+      gap: 5px;
+      margin-bottom: 10px;
+    }
+    #hidden-measure {
+      visibility: hidden;
+      position: absolute;
+      top: -9999px;
+      left: -9999px;
+      white-space: pre-wrap;
+      word-break: break-word;
+      display: inline-block;
+      padding: 4px 8px;
+    }
+    #settings-modal {
+      position: absolute;
+      top: 100px;
+      left: 250px;
+      background: white;
+      border: 1px solid #aaa;
+      padding: 15px;
+      box-shadow: 0 0 10px rgba(0,0,0,0.2);
+      display: none;
+      z-index: 999;
+    }
+    
+    #overlay {
+      width: 220px;
+      background-color: #222;
+      border: 2px solid #00d084;
+      border-radius: 6px;
+      padding: 12px;
+      display: none;
+      position: absolute;
+      cursor: grab;
+      user-select: none;
+      top: 100px;
+      left: 100px;
+      z-index: 999;
+      cursor: grab;
+    }
+    #overlay h2 {
+      background-color: #00d084;
+      color: black;
+      text-align: center;
+      padding: 6px 0;
+      margin: 0 0 12px 0;
+      font-size: 1.2em;
+      border-radius: 2px;
+    }
+    #overlay:active {
+  cursor: grabbing;
+}
+    #overlayList {
+      transition: opacity 0.4s ease;
+      opacity: 1;
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-start;
+      font-size: 1.0em;
+      line-height: 1.1em;
+    }
+    #overlayTimer {
+      background-color: #333;
+      color: #f7fafa;
+      text-align: center;
+      font-weight: bold;
+      font-size: 1.3em;
+      padding: 6px;
+      border-radius: 3px;
+    }
+    #pageDots {
+      margin: 5px 0;
+      text-align: center;
+    }
+
+    #configModal {
+      display: none;
+      position: fixed;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      background: rgba(0, 0, 0, 0.6);
+      justify-content: center;
+      align-items: center;
+      z-index: 1000;
+    }
+    .modal-content {
+      background: #2a2a2a;
+      padding: 40px;
+      border-radius: 10px;
+      width: 600px;
+      box-shadow: 0 0 20px rgba(0,0,0,0.5);
+      color: white;
+    }
+    textarea, input[type="text"] {
+      width: 100%;
+      margin-bottom: 15px;
+      padding: 12px;
+      border-radius: 5px;
+      border: none;
+      font-size: 1.1em;
+      background: #444;
+      color: white;
+    }
+    textarea {
+      resize: none;
+      overflow: hidden;
+      height: 250px;
+      display: none;
+    }
+    #entriesContainer {
+      max-height: 300px;
+      overflow-y: auto;
+      margin-bottom: 10px;
+      border: 1px solid #00d084;
+      padding: 10px;
+      background-color: #333;
+      border-radius: 5px;
+    }
+    .health-bar {
+      user-select: none; 
+      position: absolute;
+      font-size: 1.3em;
+      padding: 4px 8px;
+      border: 1px solid #888;
+      background: white;
+      cursor: move;
+      user-select: text;
+      white-space: pre-wrap;
+    }
+    #health-settings-modal {
+      position: absolute;
+      top: 100px;
+      left: 250px;
+      background: white;
+      border: 1px solid #aaa;
+      padding: 15px;
+      box-shadow: 0 0 10px rgba(0,0,0,0.2);
+      display: none;
+      z-index: 999;
+    }
+  </style>
+</head>
+<body>
+  <div id="sidebar">
+    <div class="text-controls">
+      <button onclick="addTextBox()">+ Textfeld</button>
+      <button onclick="openSettings()" title="Text-Einstellungen">✏️</button>
+    </div>
+    <button onclick="sendToOverlay()">An Overlay senden</button>
+    <button onclick="deleteSelectedBoxes()">Markierte löschen</button>
+    <button id="createOverlayBtn" onclick="openModal(false)">Overlay erstellen</button>
+    <button id="editOverlayBtn" onclick="openModal(true)">Overlay bearbeiten</button>
+    <div class="text-controls">
+  <button onclick="addHealthBar()">Lebensanzeige</button>
+  <button onclick="openHealthSettings()" title="Lebensanzeige-Einstellungen">✏️</button>
+  </div>
+    </div>
+    <div class="text-controls">
+    
+    </div>
+  
+  <div id="editor-area">
+    <div id="overlay-frame">
+      <div id="overlay">
+        <h2>WIN-CHALLENGE</h2>
+        <div id="overlayList"></div>
+        <div id="pageDots"></div>
+        <div id="overlayTimer">00:00:00</div>
+      </div>
+    </div>
+    <div id="hidden-measure"></div>
+  </div>
+  
+   <div id="settings-modal"> <!-- Textfeld -->
+    <h3>Texteinstellungen</h3> <!-- Textfeld -->
+    <label>Schriftgröße (px): <input type="number" id="font-size-setting" value="24"></label><br><br> <!-- Textfeld -->
+    <label>Farbe: <input type="color" id="font-color-setting" value="#000000"></label><br><br> <!-- Textfeld -->
+    <label>Fett: <input type="checkbox" id="font-weight-setting"></label><br><br> <!-- Textfeld -->
+    <button onclick="applySettings()">Übernehmen</button> <!-- Textfeld -->
+    <button onclick="closeSettings()">Abbrechen</button> <!-- Textfeld -->
+  </div>
+  <div id="health-settings-modal">
+  <h3>Standard für neue Lebensanzeigen</h3>
+  <label>Anzahl Herzen:
+    <input type="number" id="heart-count-setting" min="1" max="20" value="5">
+  </label><br><br>
+  <label>Herzfarbe:
+    <select id="heart-color-setting">
+      <option value="red">❤️ Rot</option>
+      <option value="white">🤍 Weiß</option>
+    </select>
+  </label><br><br>
+  <button onclick="applyHealthSettings()">Übernehmen</button>
+  <button onclick="closeHealthSettings()">Abbrechen</button>
+</div>
+  
+  <!-- Overlay Modal -->
+  <div id="configModal">
+    <div class="modal-content">
+      <h3 style="margin-top: 0;">Win-Challenge konfigurieren</h3>
+      <label>Titel (max. 30 Zeichen):</label>
+      <input id="overlayTitle" type="text" maxlength="30" value="WIN-CHALLENGE" />
+      <label>Einträge:</label>
+      <textarea id="entries"></textarea>
+      <div id="entriesContainer"></div>
+      <button onclick="addEntry()">+ Neuer Eintrag</button>
+
+      <p style="margin-top: 10px;">
+        <label><input type="checkbox" id="hideTimerCheckbox" /> Timer ausblenden</label>
+      </p>
+
+      <p style="margin-top: 20px;">
+        <label>Timer:</label><br />
+        <div style="display: flex; gap: 10px; align-items: center;">
+          <span id="timerDisplay">00:00:00</span>
+          <button onclick="startConfigTimer()">Start</button>
+          <button onclick="stopConfigTimer()">Stopp</button>
+          <button onclick="resetConfigTimer()">Reset</button>
+        </div>
+      </p>
+
+      <div style="text-align: right;">
+        <button onclick="createOverlay()">OK</button>
+        <button onclick="closeModal()" class="secondary">Abbrechen</button>
+      </div>
+      <p id="errorText" style="color: red; display: none;">Titel ist zu lang!</p>
+    </div>
+  </div>
+
+  <!-- Overlay Anzeige -->
+  <div id="overlay">
+    <h2>WIN-CHALLENGE</h2>
+    <div id="overlayList"></div>
+    <div id="pageDots"></div>
+    <div id="overlayTimer">00:00:00</div>
+  </div>
+
+  <!-- SCRIPT -->
+  <script>
+    let defaultHeartCount = 5;
+    let defaultHeartColor = 'red';
+    let isEditingOverlay = false;
+    const ws = new WebSocket("ws://localhost:8080");
+    ws.onopen = () => console.log("Verbunden mit Server");
+    
+     window.addEventListener("DOMContentLoaded", () => {
+    document.getElementById("createOverlayBtn").disabled = false;
+    document.getElementById("editOverlayBtn").disabled = true;
+  });
+    (function makeOverlayDraggable() {
+    const overlay = document.getElementById("overlay");
+    const frame = document.getElementById("overlay-frame");
+    let isDragging = false;
+    let offsetX = 0;
+    let offsetY = 0;
+
+    overlay.addEventListener("mousedown", function (e) {
+      if (e.button !== 0) return;
+
+      const frameRect = frame.getBoundingClientRect();
+      offsetX = e.clientX - frameRect.left - parseInt(overlay.style.left || 0);
+      offsetY = e.clientY - frameRect.top - parseInt(overlay.style.top || 0);
+
+      isDragging = true;
+      overlay.style.cursor = "grabbing";
+
+      e.preventDefault(); // verhindert Textauswahl
+    });
+
+    document.addEventListener("mousemove", function (e) {
+      if (!isDragging) return;
+
+      const frameRect = frame.getBoundingClientRect();
+      const newX = e.clientX - frameRect.left - offsetX;
+      const newY = e.clientY - frameRect.top - offsetY;
+
+      overlay.style.left = newX + "px";
+      overlay.style.top = newY + "px";
+
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({
+          action: "updateWinChallengePosition",
+          x: newX,
+          y: newY
+        }));
+      }
+    });
+
+    document.addEventListener("mouseup", function () {
+      if (isDragging) {
+        isDragging = false;
+        overlay.style.cursor = "grab";
+        sendToOverlay();
+      }
+    });
+
+    overlay.ondblclick = function (e) {
+      overlay.classList.toggle("selected");
+      e.stopPropagation();
+    };
+  })();
+
+
+    // TEXTFELD FUNKTIONEN...
+    let defaultFontSize = '24px';
+    let defaultFontColor = '#000000';
+    let defaultFontWeight = 'normal';
+
+    function openSettings() { // Textfeld
+      document.getElementById("settings-modal").style.display = "block";
+      document.getElementById("font-size-setting").value = parseInt(defaultFontSize);
+      document.getElementById("font-color-setting").value = defaultFontColor;
+      document.getElementById("font-weight-setting").checked = defaultFontWeight === 'bold';
+    }
+
+    function closeSettings() {
+      document.getElementById("settings-modal").style.display = "none";
+    }
+
+    function applySettings() { // Textfeld
+      const size = document.getElementById("font-size-setting").value;
+      const color = document.getElementById("font-color-setting").value;
+      const weight = document.getElementById("font-weight-setting").checked ? "bold" : "normal";
+
+      defaultFontSize = size + "px";
+      defaultFontColor = color;
+      defaultFontWeight = weight;
+
+      closeSettings();
+    }
+
+    function addTextBox() { // Textfeld
+      const box = document.createElement("div");
+      box.className = "text-box";
+      box.contentEditable = true;
+      box.style.left = "50px";
+      box.style.top = "50px";
+      box.style.fontSize = defaultFontSize;
+      box.style.color = defaultFontColor;
+      box.style.fontWeight = defaultFontWeight;
+
+      box.innerHTML = "Hier Text eingeben";
+
+      box.ondblclick = function (e) {
+        box.classList.toggle("selected");
+        e.stopPropagation();
+      };
+
+      box.onmousedown = function (e) {
+        const overlayFrame = document.getElementById("overlay-frame");
+        const rect = overlayFrame.getBoundingClientRect();
+        const offsetX = e.clientX - rect.left - parseInt(box.style.left);
+        const offsetY = e.clientY - rect.top - parseInt(box.style.top);
+
+        function onMouseMove(ev) {
+          box.style.left = (ev.clientX - rect.left - offsetX) + "px";
+          box.style.top = (ev.clientY - rect.top - offsetY) + "px";
+        }
+
+        function onMouseUp() {
+          document.removeEventListener("mousemove", onMouseMove);
+          document.removeEventListener("mouseup", onMouseUp);
+
+          // 🟢 Position über WebSocket senden
+          if (ws && ws.readyState === WebSocket.OPEN) {
+            sendToOverlay();
+          }
+        }
+
+        document.addEventListener("mousemove", onMouseMove);
+        document.addEventListener("mouseup", onMouseUp);
+      };
+
+      box.addEventListener("input", () => { // Textfeld
+        const measure = document.getElementById("hidden-measure");
+        const styles = window.getComputedStyle(box);
+
+        measure.style.fontSize = styles.fontSize;
+        measure.style.fontWeight = styles.fontWeight;
+        measure.style.fontFamily = styles.fontFamily;
+        measure.style.lineHeight = styles.lineHeight;
+        measure.style.padding = styles.padding;
+        measure.style.letterSpacing = styles.letterSpacing;
+        measure.style.whiteSpace = "pre-wrap";
+        measure.style.wordBreak = "break-word";
+        measure.style.width = "fit-content";
+        measure.style.maxWidth = "1000px";
+
+        measure.innerHTML = box.innerHTML + "<br>";
+
+        const newWidth = measure.offsetWidth + 10;
+        const newHeight = measure.offsetHeight + 10;
+
+        box.style.width = Math.max(newWidth, 150) + "px";
+        box.style.height = Math.max(newHeight, 30) + "px";
+      });
+
+      document.getElementById("overlay-frame").appendChild(box);
+    }
+    function autoResizeBox(box) {
+      const hiddenMeasure = document.getElementById("hidden-measure");
+      hiddenMeasure.innerHTML = box.innerHTML || "&nbsp;";
+      hiddenMeasure.style.fontSize = box.style.fontSize;
+      hiddenMeasure.style.fontWeight = box.style.fontWeight;
+      hiddenMeasure.style.fontFamily = window.getComputedStyle(box).fontFamily;
+      hiddenMeasure.style.lineHeight = window.getComputedStyle(box).lineHeight;
+
+      box.style.width = hiddenMeasure.offsetWidth + "px";
+      box.style.height = hiddenMeasure.offsetHeight + "px";
+    }
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Delete") deleteSelectedBoxes();
+    });
+
+    document.getElementById("overlay-frame").addEventListener("click", () => {
+      document.querySelectorAll(".selected").forEach(el => el.classList.remove("selected"));
+    });
+
+     function deleteSelectedBoxes() {
+  document.querySelectorAll(".selected.text-box, .selected.health-bar").forEach(el => el.remove());
+
+  const overlay = document.getElementById("overlay");
+  if (overlay.classList.contains("selected")) {
+    overlay.style.display = "none";
+    overlay.classList.remove("selected");
+    resetOverlayConfig();
+  }
+
+  sendToOverlay(); // WebSocket aktualisieren
+}
+  
+      
+
+       document.getElementById("overlay-frame").addEventListener("click", () => {
+      document.querySelectorAll(".selected").forEach(el => el.classList.remove("selected"));
+    });
+
+    function sendToOverlay() {
+  const boxes = [];
+
+  // Bestehende Text-Boxen
+  document.querySelectorAll(".text-box").forEach(box => {
+    boxes.push({
+      type: "text",
+      text: box.innerHTML,
+      x: parseInt(box.style.left),
+      y: parseInt(box.style.top),
+      fontSize: box.style.fontSize,
+      color: box.style.color,
+      fontWeight: box.style.fontWeight
+    });
+  });
+  document.querySelectorAll(".health-bar").forEach(bar => {
+        boxes.push({
+          type: "health",
+          text: bar.innerHTML,
+          x: parseInt(bar.style.left),
+          y: parseInt(bar.style.top),
+          fontSize: "1.3em",
+          color: "#000000",
+          fontWeight: "normal"
+        });
+      });
+
+  // Win-Challenge
+  const overlayEl    = document.getElementById("overlay");
+  const overlayList  = document.getElementById("overlayList");
+  const firstEntry   = overlayList.querySelector("div");
+
+  const entryFontSize   = firstEntry ? window.getComputedStyle(firstEntry).fontSize   : null;
+  const entryFontColor  = firstEntry ? window.getComputedStyle(firstEntry).color      : null;
+  const entryFontWeight = firstEntry ? window.getComputedStyle(firstEntry).fontWeight : null;
+
+  boxes.push({
+    type: "win-challenge",
+    title: overlayEl.querySelector("h2").innerText,
+    entries: pages[currentPage] || [],
+    checked: pagesChecked[currentPage] || {},
+    time: configTimerSeconds,
+    visible: overlayEl.style.display === "block",
+    hideTimer: document.getElementById("hideTimerCheckbox").checked,
+    x: parseInt(overlayEl.style.left) || 0,
+    y: parseInt(overlayEl.style.top)  || 0,
+    currentPage: currentPage,
+    pageCount: pages.length,
+    fixedHeight: winChallengeFixedHeight,
+    // Neue Felder für korrekte Formatierung
+    entryFontSize,
+    entryFontColor,
+    entryFontWeight
+  });
+
+  ws.send(JSON.stringify({ action: "setElements", boxes }));
+}
+
+    // --- OVERLAY LOGIK HIER (aus test.html)
+    let pages = [];
+    let pagesChecked = [];
+    let currentPage = 0;
+    let slideInterval;
+    let configTimerInterval;
+    let configTimerSeconds = 0;
+    let winChallengeFixedHeight = null;
+    
+
+    function openModal(isEditing = false) {
+    isEditingOverlay = isEditing;
+    document.getElementById("configModal").style.display = "flex";
+    buildEntryList();
+    updateConfigTimerDisplay();
+    document.getElementById("hideTimerCheckbox").checked =
+      document.getElementById("overlayTimer").style.display === "none";
+  }
+    function closeModal() {
+      document.getElementById("configModal").style.display = "none";
+    }
+
+    function buildEntryList() {
+  const textarea = document.getElementById("entries");
+  const container = document.getElementById("entriesContainer");
+  container.innerHTML = "";
+  const lines = textarea.value.trim().split("\n");
+  lines.forEach((line, index) => {
+    const div = document.createElement("div");
+    div.style.display = "flex";
+    div.style.alignItems = "center";
+    div.style.marginBottom = "6px";
+
+    const input = document.createElement("input");
+    input.type = "text";
+    input.value = line || "NEUER EINTRAG";
+    input.style.flex = "1";
+    input.style.marginRight = "10px";
+
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.dataset.index = index;
+
+    // ✅ Zustand aus pagesChecked setzen
+    const checked = !!(pagesChecked[Math.floor(index / 7)] && pagesChecked[Math.floor(index / 7)][index % 7]);
+    checkbox.checked = checked;
+
+    div.appendChild(input);
+    div.appendChild(checkbox);
+    container.appendChild(div);
+  });
+}
+
+    function updateTextareaFromList() {
+      const inputs = document.querySelectorAll("#entriesContainer input[type='text']");
+      const lines = Array.from(inputs).map(input => input.value);
+      document.getElementById("entries").value = lines.join("\n");
+    }
+
+    function addEntry() {
+      updateTextareaFromList();
+      const textarea = document.getElementById("entries");
+      const lines = textarea.value.trim().split("\n");
+      lines.push("NEUER EINTRAG");
+      textarea.value = lines.join("\n");
+      buildEntryList();
+    }
+
+    function startConfigTimer() {
+      if (configTimerInterval) return;
+      configTimerInterval = setInterval(() => {
+        configTimerSeconds++;
+        updateConfigTimerDisplay();
+        updateOverlayTimerDisplay();
+
+        // Timerzeit jede Sekunde an das Overlay schicken
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({
+            action: "updateWinChallengeTimer",
+            time: configTimerSeconds
+          }));
+        }
+      }, 1000);
+    }
+
+    function stopConfigTimer() {
+  clearInterval(configTimerInterval);
+  configTimerInterval = null;
+}
+
+    function resetConfigTimer() {
+  stopConfigTimer(); // ← STOPPEN DES TIMERS
+  configTimerSeconds = 0;
+  updateConfigTimerDisplay();
+  updateOverlayTimerDisplay();
+}
+    function updateConfigTimerDisplay() {
+      const t = new Date(configTimerSeconds * 1000).toISOString().substr(11, 8);
+      document.getElementById("timerDisplay").textContent = t;
+    }
+
+    function updateOverlayTimerDisplay() {
+      const t = new Date(configTimerSeconds * 1000).toISOString().substr(11, 8);
+      document.getElementById("overlayTimer").textContent = t;
+    }
+
+      function createOverlay() {
+  const title = document.getElementById("overlayTitle").value.trim();
+  if (title.length > 30) {
+    document.getElementById("errorText").style.display = "block";
+    return;
+  }
+  document.getElementById("errorText").style.display = "none";
+  document.querySelector("#overlay h2").textContent = title;
+
+  // Einträge aus dem Textfeld übernehmen
+  updateTextareaFromList();
+
+  // ── Seiten & Checkbox-Zustände aufbauen (6 statt 7 Einträge pro Seite) ──
+  const entries = document.getElementById("entries").value.trim().split("\n");
+  pages = [];
+  pagesChecked = [];
+  for (let i = 0; i < entries.length; i += 6) {
+    pages.push(entries.slice(i, i + 6));
+    const checkPage = {};
+    for (let j = 0; j < 6; j++) {
+      const globalIndex = i + j;
+      const cb = document
+        .querySelector(`#entriesContainer input[type="checkbox"][data-index="${globalIndex}"]`);
+      checkPage[j] = cb ? cb.checked : false;
+    }
+    pagesChecked.push(checkPage);
+  }
+  // ── Ende des Blocks ──
+
+  // Reset der List-Höhe, erstes Rendern
+  document.getElementById("overlayList").style.height = "auto";
+  currentPage = 0;
+  showPage(currentPage);
+
+  // Messung & Height-Update per WS
+  const list = document.getElementById("overlayList");
+  requestAnimationFrame(() => {
+    winChallengeFixedHeight = list.offsetHeight;
+    list.style.height = winChallengeFixedHeight + "px";
+    ws.send(JSON.stringify({
+      action: "updateWinChallengeHeight",
+      fixedHeight: winChallengeFixedHeight
+    }));
+  });
+
+  clearInterval(slideInterval);
+  if (pages.length > 1) {
+    slideInterval = setInterval(() => {
+      currentPage = (currentPage + 1) % pages.length;
+      showPage(currentPage);
+    }, 25000);
+  }
+
+  updateOverlayTimerDisplay();
+  const hideTimer = document.getElementById("hideTimerCheckbox").checked;
+  document.getElementById("overlayTimer").style.display = hideTimer ? "none" : "block";
+  document.getElementById("overlay").style.display = "block";
+
+  const overlayEl = document.getElementById("overlay");
+  if (!isEditingOverlay) {
+    overlayEl.style.left = "50px";
+    overlayEl.style.top = "50px";
+  }
+  overlayEl.ondblclick = function(e) {
+    overlayEl.classList.toggle("selected");
+    e.stopPropagation();
+  };
+
+  closeModal();
+  sendToOverlay();
+  updateOverlayButtons();
+}
+// ✅ MouseDown auf Overlay für Drag
+document.getElementById("overlay").addEventListener("mousedown", function (e) {
+  isDragging = true;
+  offsetX = e.clientX - this.offsetLeft;
+  offsetY = e.clientY - this.offsetTop;
+});
+
+// ✅ Maus loslassen beendet Drag
+document.addEventListener("mouseup", function () {
+  isDragging = false;
+});
+
+// ✅ Overlay verschieben & Position senden
+document.addEventListener("mousemove", function (e) {
+  if (!isDragging || !overlayEl) return;
+
+  const x = e.clientX - offsetX;
+  const y = e.clientY - offsetY;
+
+  overlayEl.style.left = x + "px";
+  overlayEl.style.top = y + "px";
+
+  // ✅ Position per WebSocket senden
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify({
+      action: "updateWinChallengePosition",
+      x,
+      y
+    }));
+  }
+});
+
+    function showPage(index) {
+  const container = document.getElementById("overlayList");
+  container.innerHTML = "";
+  const page = pages[index];
+  const checked = pagesChecked[index] || {};
+
+  // 6 statt 7 Einträge pro Seite
+  for (let i = 0; i < 6; i++) {
+    const div = document.createElement("div");
+    div.style.marginBottom = "4px";
+    div.textContent = page[i] || " ";
+    div.style.color = checked[i] ? "#00d084" : "#fff";
+    container.appendChild(div);
+  }
+
+  const dotsContainer = document.getElementById("pageDots");
+  dotsContainer.innerHTML = "";
+  if (pages.length > 1) {
+    for (let i = 0; i < pages.length; i++) {
+      const dot = document.createElement("span");
+      dot.textContent = "●";
+      dot.style.margin = "0 4px";
+      dot.style.color = i === index ? "#0f0" : "#666";
+      dotsContainer.appendChild(dot);
+    }
+  }
+
+  // Win-Challenge Overlay bei Seitenwechsel erneut senden
+  sendToOverlay();
+}
+
+    // Overlay verschiebbar machen
+    
+    let isDragging = false, offsetX = 0, offsetY = 0;
+    
+
+    overlayEl.addEventListener("mousedown", function (e) {
+      if (e.button !== 0) return;
+      isDragging = true;
+      const frameRect = document.getElementById("overlay-frame").getBoundingClientRect();
+      offsetX = e.clientX - frameRect.left - parseInt(overlayEl.style.left || 0);
+      offsetY = e.clientY - frameRect.top - parseInt(overlayEl.style.top || 0);
+      overlayEl.style.cursor = "grabbing";
+    });
+
+
+    document.addEventListener("mousemove", function (e) {
+      if (!isDragging) return;
+      const frameRect = document.getElementById("overlay-frame").getBoundingClientRect();
+      const x = e.clientX - frameRect.left - offsetX;
+      const y = e.clientY - frameRect.top - offsetY;
+      overlayEl.style.left = x + "px";
+      overlayEl.style.top = y + "px";
+
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({
+          action: "updateWinChallengePosition",
+          x,
+          y
+        }));
+      }
+    });
+
+    document.addEventListener("mouseup", function () {
+      isDragging = false;
+      overlayEl.style.cursor = "grab";
+    });
+    function updateOverlayButtons() {
+    const createBtn = document.getElementById("createOverlayBtn");
+    const editBtn = document.getElementById("editOverlayBtn");
+    const overlayExists = document.getElementById("overlay-frame").children.length > 0;
+
+    createBtn.disabled = overlayExists;
+    editBtn.disabled = !overlayExists;
+  }
+  document.getElementById("overlay-frame").addEventListener("click", () => {
+    document.querySelectorAll(".selected").forEach(el => el.classList.remove("selected"));
+  });
+
+  function resetOverlayConfig() {
+    const preservedTitle = document.getElementById("overlayTitle").value;
+
+    pages = [];
+    pagesChecked = [];
+    configTimerSeconds = 0;
+
+    // Titel beibehalten
+    document.getElementById("overlayTitle").value = preservedTitle;
+    document.querySelector("#overlay h2").textContent = preservedTitle;
+
+    document.getElementById("entries").value = "";
+    document.getElementById("hideTimerCheckbox").checked = false;
+    document.getElementById("entriesContainer").innerHTML = "";
+    document.getElementById("overlayList").innerHTML = "";
+    clearInterval(slideInterval);
+
+    updateOverlayButtons();
+    document.getElementById("createOverlayBtn").disabled = false;
+    document.getElementById("editOverlayBtn").disabled = true;
+  }
+  function openHealthSettings() {
+    document.getElementById("heart-count-setting").value = defaultHeartCount;
+    document.getElementById("heart-color-setting").value = defaultHeartColor;
+    document.getElementById("health-settings-modal").style.display = "block";
+  }
+  function closeHealthSettings() {
+    document.getElementById("health-settings-modal").style.display = "none";
+  }
+  function applyHealthSettings() {
+    defaultHeartCount = parseInt(document.getElementById("heart-count-setting").value);
+    defaultHeartColor = document.getElementById("heart-color-setting").value;
+    closeHealthSettings();
+  }
+  function addHealthBar() {
+  const bar = document.createElement("div");
+  bar.className = "health-bar";
+  bar.style.left = "100px";
+  bar.style.top = "100px";
+  const heartChar = defaultHeartColor === "white" ? "🤍" : "❤️";
+  bar.innerText = heartChar.repeat(defaultHeartCount);
+
+  let isDragging = false;
+  let mouseDownTime = 0;
+
+  bar.ondblclick = (e) => {
+    bar.classList.toggle("selected");
+    e.stopPropagation();
+  };
+
+  // Mousedown zum Verschieben vorbereiten
+  bar.addEventListener("mousedown", function (e) {
+  if (e.button !== 0) return; // nur linker Mausklick
+  isDragging = false;
+  mouseDownTime = Date.now();
+
+  const frame = document.getElementById("overlay-frame");
+  const rect = frame.getBoundingClientRect();
+  const offsetX = e.clientX - rect.left - parseInt(bar.style.left);
+  const offsetY = e.clientY - rect.top - parseInt(bar.style.top);
+
+  function onMouseMove(ev) {
+    isDragging = true;
+    bar.style.left = (ev.clientX - rect.left - offsetX) + "px";
+    bar.style.top = (ev.clientY - rect.top - offsetY) + "px";
+  }
+
+  function onMouseUp() {
+    document.removeEventListener("mousemove", onMouseMove);
+    document.removeEventListener("mouseup", onMouseUp);
+
+    // 🟢 Position über WebSocket senden
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      sendToOverlay();
+    }
+  }
+
+  document.addEventListener("mousemove", onMouseMove);
+  document.addEventListener("mouseup", onMouseUp);
+});
+
+
+  // Linksklick = Herz entfernen
+  bar.addEventListener("click", (e) => {
+    e.stopPropagation();
+    const clickDuration = Date.now() - mouseDownTime;
+    if (!isDragging && clickDuration < 300) {
+      if (bar.innerText.length <= 2) {
+        bar.remove(); // Letztes Herz: Element löschen
+      } else {
+        bar.innerText = bar.innerText.slice(0, -2); // Ein Herz entfernen
+      }
+      sendToOverlay();
+    }
+  });
+
+  // Rechtsklick = Herz hinzufügen
+  bar.addEventListener("contextmenu", (e) => {
+    e.preventDefault(); // Standardkontextmenü unterdrücken
+    const heartChar = defaultHeartColor === "white" ? "🤍" : "❤️";
+    bar.innerText += heartChar;
+    sendToOverlay();
+  });
+
+  document.getElementById("overlay-frame").appendChild(bar);
+}
+document.querySelectorAll(".health-bar").forEach(bar => {
+  boxes.push({
+    type: "health",
+    text: bar.innerHTML,
+    x: parseInt(bar.style.left),
+    y: parseInt(bar.style.top),
+    fontSize: "2em",
+    color: "#000000",
+    fontWeight: "normal"
+  });
+});
+  </script>
+</body>
+</html>
+ 
