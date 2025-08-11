@@ -1,0 +1,623 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Overlay Steuerung</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      display: flex;
+      font-family: sans-serif;
+      user-select: none;
+    }
+    #sidebar {
+      width: 220px;
+      background: #f0f0f0;
+      padding: 10px;
+      border-right: 1px solid #ccc;
+    }
+    #editor-area {
+      flex: 1;
+      position: relative;
+      background: #eaeaea;
+      display: flex;
+      justify-content: center;
+      align-items: start;
+      overflow: hidden;
+      height: 1080px;
+    }
+    #overlay-frame {
+      position: relative;
+      width: 1920px;
+      height: 1080px;
+      background: white;
+      border: 2px dashed #333;
+      box-shadow: 0 0 8px rgba(0,0,0,0.3);
+    }
+    .text-box {
+      position: absolute;
+      font-size: 1.5em;
+      padding: 4px 8px;
+      border: 1px solid #888;
+      color: black;
+      background: white;
+      cursor: move;
+      user-select: text;
+      resize: none;
+      overflow: hidden;
+      white-space: pre-wrap;
+    }
+    .selected {
+      border: 2px solid red !important;
+    }
+    button {
+      width: 100%;
+      margin-top: 10px;
+      cursor: pointer;
+    }
+    button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+    .text-controls {
+      display: flex;
+      gap: 5px;
+      margin-bottom: 10px;
+    }
+    #hidden-measure {
+      visibility: hidden;
+      position: absolute;
+      top: -9999px;
+      left: -9999px;
+      white-space: pre-wrap;
+      display: inline-block;
+      padding: 4px 8px;
+    }
+    #settings-modal {
+      position: absolute;
+      top: 100px;
+      left: 250px;
+      background: white;
+      border: 1px solid #aaa;
+      padding: 15px;
+      box-shadow: 0 0 10px rgba(0,0,0,0.2);
+      display: none;
+      z-index: 999;
+      width: 400px;
+    }
+    #settings-modal label {
+      display: block;
+      margin-bottom: 8px;
+    }
+    #timer-blocks input {
+      width: 100%;
+      box-sizing: border-box;
+    }
+    #timer-blocks .block {
+      margin-bottom: 8px;
+    }
+    #timer-blocks .block label {
+      font-weight: bold;
+      margin-bottom: 2px;
+      display: block;
+    }
+    .timer-bordered {
+  border: 2px solid #ffffff;
+  border-radius: 20px;
+  background-color: rgba(240, 240, 240, 0.6);
+  padding: 4px 12px;
+}
+#timer-blocks {
+  display: flex;
+  gap: 10px;
+  flex-wrap: nowrap;
+  margin-bottom: 10px;
+}
+#timer-blocks .block {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 60px;
+}
+#timer-blocks .block label {
+  font-weight: bold;
+  margin-bottom: 2px;
+}
+#timer-blocks input {
+  width: 100%;
+  box-sizing: border-box;
+}
+.timer-buttons {
+      display: flex;
+      gap: 8px;
+      margin-top: 10px;
+    }
+    .timer-buttons button {
+      flex: 1;
+      padding: 6px;
+      font-size: 0.9em;
+      margin-top: 0;
+    }
+    .timer-bordered {
+      border: 2px solid #ffffff;
+      border-radius: 20px;
+      background-color: rgba(240, 240, 240, 0.6);
+      padding: 4px 12px;
+    }
+  </style>
+</head>
+<body>
+  <div id="sidebar">
+    <div class="text-controls">
+      <button onclick="addTextBox()">+ Textfeld</button>
+      <button onclick="openSettings()" title="Text-Einstellungen">✏️</button>
+    </div>
+    <button onclick="deleteSelectedBoxes()">Markierte löschen</button>
+    <hr>
+    <div>
+      <button onclick="addTimer()">+ Timer</button>
+      <button id="timer-settings-btn" onclick="openTimerSettings()" disabled>⏱️ Timer-Einstellungen</button>
+    </div>
+  </div>
+
+  <div id="editor-area">
+    <div id="overlay-frame"></div>
+    <div id="hidden-measure"></div>
+  </div>
+
+  <div id="settings-modal">
+    <h3 id="settings-title">Einstellungen</h3>
+
+    <div id="common-settings">
+      <label>Schriftgröße (px): <input type="number" id="font-size-setting" value="24" min="1"></label>
+      <label>Farbe: <input type="color" id="font-color-setting" value="#ffffff"></label>
+      <label>Fett: <input type="checkbox" id="font-weight-setting"></label>
+    </div>
+
+    <div id="timer-controls" style="display: none; margin-top: 10px;">
+      <hr>
+      <label><input type="checkbox" id="count-up-checkbox"> Hochzählen</label>
+      <label><input type="checkbox" id="count-down-checkbox"> Runterzählen</label>
+      <label><input type="checkbox" id="show-border-checkbox"> Rahmen anzeigen</label>
+      <label>
+      <input type="checkbox" id="use-days-checkbox" checked>
+      Tage umrechnen (sonst Stunden hochzählen)
+    </label>
+      <div id="timer-blocks"> <div class="block" id="days-block"></div>
+        <div class="block"><label for="days-input">Tage</label><input type="number" id="days-input" value="0" min="0"></div>
+        <div class="block"><label for="hours-input">Stunden</label><input type="number" id="hours-input" value="0" min="0"></div>
+        <div class="block"><label for="minutes-input">Minuten</label><input type="number" id="minutes-input" value="0" min="0" max="59"></div>
+        <div class="block"><label for="seconds-input">Sekunden</label><input type="number" id="seconds-input" value="0" min="0" max="59"></div>
+      </div>
+      <div class="timer-buttons">
+        <button onclick="startTimer()">▶️ Start</button>
+        <button onclick="pauseTimer()">⏸️ Pause</button>
+        <button onclick="resetTimer()">⏹️ Reset</button>
+      </div>
+    </div>
+
+    <br>
+    <button onclick="applySettings()">Übernehmen</button>
+    <button onclick="closeSettings()">Abbrechen</button>
+  </div>
+
+  <script>
+    const ws = new WebSocket("ws://localhost:8080");
+    ws.onopen = () => console.log("Editor mit Server verbunden");
+
+    let defaultFontSize = '24px';
+    let defaultFontColor = '#ffffff';
+    let defaultFontWeight = 'normal';
+    let startConfigSeconds = 0;
+    let settingsUpdateInterval = null;
+
+
+    function openSettings() {
+      document.getElementById("settings-title").innerText = "Texteinstellungen";
+      document.getElementById("settings-modal").style.display = "block";
+      document.getElementById("common-settings").style.display = "block";
+      document.getElementById("timer-controls").style.display = "none";
+      document.getElementById("font-size-setting").value = parseInt(defaultFontSize);
+      document.getElementById("font-color-setting").value = defaultFontColor;
+      document.getElementById("font-weight-setting").checked = defaultFontWeight === 'bold';
+      document.getElementById("settings-modal").dataset.mode = "text";
+    }
+    function closeSettings() {
+  clearInterval(settingsUpdateInterval);
+  document.getElementById("settings-modal").style.display = "none";
+  document.getElementById("settings-modal").dataset.mode = "";
+}
+    function openTimerSettings() {
+  if (!timers.length) {
+    alert("Kein Timer vorhanden!");
+    return;
+  }
+  if (!selectedTimer) {
+    selectTimer(timers[0]);
+  }
+
+  const el = selectedTimer.element;
+
+  // ← HIER: Color Picker nur einmal vorbesetzen
+  document.getElementById("font-color-setting").value = selectedTimer.color;
+
+
+  // Tage‑Block nur anzeigen, wenn ≥ 24h
+  const days = Math.floor(selectedTimer.remainingSeconds / 86400);
+  document.getElementById("days-block").style.display = days > 0 ? "block" : "none";
+
+  // Titel + Sichtbarkeiten
+  document.getElementById("settings-title").innerText = "Timer‑Einstellungen";
+  document.getElementById("common-settings").style.display = "block";
+  document.getElementById("timer-controls").style.display = "block";
+  document.getElementById("settings-modal").dataset.mode = "timer";
+
+  // Restliche Inputs
+  document.getElementById("font-size-setting").value     = parseInt(el.style.fontSize);
+  document.getElementById("font-weight-setting").checked = el.style.fontWeight === 'bold';
+  document.getElementById("count-up-checkbox").checked   = selectedTimer.countUp;
+  document.getElementById("count-down-checkbox").checked = !selectedTimer.countUp;
+  document.getElementById("show-border-checkbox").checked = el.classList.contains("timer-bordered");
+
+
+  let secs = selectedTimer.remainingSeconds;
+  document.getElementById("days-input").value    = Math.floor(secs / 86400); secs %= 86400;
+  document.getElementById("hours-input").value   = Math.floor(secs / 3600);  secs %= 3600;
+  document.getElementById("minutes-input").value = Math.floor(secs / 60);
+  document.getElementById("seconds-input").value = secs % 60;
+
+  // Modal öffnen
+  document.getElementById("settings-modal").style.display = "block";
+  // Felder live aktualisieren, solange der Timer läuft
+if (selectedTimer.timerRunning) {
+  clearInterval(settingsUpdateInterval);
+  settingsUpdateInterval = setInterval(() => {
+    const now = Date.now();
+    const elapsed = Math.floor((now - selectedTimer.startTimestamp) / 1000);
+    let secs;
+
+    if (selectedTimer.countUp) {
+      secs = selectedTimer.startSeconds + elapsed;
+    } else {
+      secs = Math.max(0, selectedTimer.startSeconds - elapsed);
+    }
+
+    document.getElementById("days-input").value    = Math.floor(secs / 86400); secs %= 86400;
+    document.getElementById("hours-input").value   = Math.floor(secs / 3600);  secs %= 3600;
+    document.getElementById("minutes-input").value = Math.floor(secs / 60);
+    document.getElementById("seconds-input").value = secs % 60;
+  }, 500);
+}
+setTimerInputsDisabled(selectedTimer.timerRunning);
+setCountDirectionDisabled(selectedTimer.timerRunning);
+
+const inputs = document.querySelectorAll('#timer-controls input');
+      inputs.forEach(el => {
+        el.removeEventListener('input', updateTimerFromSettings);
+        el.addEventListener('input', updateTimerFromSettings);
+      });
+
+      // Falls der Timer läuft, weiterhin Settings-Felder live aktualisieren
+      if (selectedTimer.timerRunning) {
+        clearInterval(settingsUpdateInterval);
+        settingsUpdateInterval = setInterval(() => {
+          updateTimerFromSettings();
+        }, 1000);
+      }
+    }
+
+   function applySettings() {
+  const mode = document.getElementById("settings-modal").dataset.mode;
+  const fs = document.getElementById("font-size-setting").value + 'px';
+  const fc = document.getElementById("font-color-setting").value;
+  const fw = document.getElementById("font-weight-setting").checked ? 'bold' : 'normal';
+
+  if (mode === 'text') {
+    defaultFontSize   = fs;
+    defaultFontColor  = fc;
+    defaultFontWeight = fw;
+  } 
+  else if (mode === 'timer' && selectedTimer) {
+    const el = selectedTimer.element;
+    el.style.fontSize   = fs;
+    el.style.color      = fc;
+    el.style.fontWeight = fw;
+    selectedTimer.color = fc;
+
+    selectedTimer.countUp = document.getElementById("count-up-checkbox").checked;
+    // neu: useDays aus Checkbox
+    selectedTimer.useDays = document.getElementById("use-days-checkbox").checked;
+
+    // Start-Zeit neu berechnen
+    const d = +document.getElementById("days-input").value;
+    const h = +document.getElementById("hours-input").value;
+    const m = +document.getElementById("minutes-input").value;
+    const s = +document.getElementById("seconds-input").value;
+    startConfigSeconds = d*86400 + h*3600 + m*60 + s;
+    selectedTimer.remainingSeconds = startConfigSeconds;
+
+    // Anzeige mit neuem Flag
+    el.textContent = formatTime(selectedTimer.remainingSeconds, selectedTimer.useDays);
+
+    const borderEnabled = document.getElementById("show-border-checkbox").checked;
+    if (borderEnabled) el.classList.add("timer-bordered");
+    else el.classList.remove("timer-bordered");
+    selectedTimer.hasBorder = borderEnabled;
+  }
+
+  closeSettings();
+}
+function applySettings() {
+  const mode = document.getElementById("settings-modal").dataset.mode;
+  const fs = document.getElementById("font-size-setting").value + 'px';
+  const fc = document.getElementById("font-color-setting").value;
+  const fw = document.getElementById("font-weight-setting").checked ? 'bold' : 'normal';
+
+  if (mode === 'text') {
+    defaultFontSize   = fs;
+    defaultFontColor  = fc;
+    defaultFontWeight = fw;
+
+  } else if (mode === 'timer' && selectedTimer) {
+    const el = selectedTimer.element;
+    el.style.fontSize   = fs;
+    el.style.color      = fc;
+    el.style.fontWeight = fw;
+    selectedTimer.color = fc;
+
+    selectedTimer.countUp = document.getElementById("count-up-checkbox").checked;
+
+    // Neues: useDays übernehmen
+    selectedTimer.useDays = document.getElementById("use-days-checkbox").checked;
+
+    // Basis-Sekunden neu berechnen
+    const d = +document.getElementById("days-input").value;
+    const h = +document.getElementById("hours-input").value;
+    const m = +document.getElementById("minutes-input").value;
+    const s = +document.getElementById("seconds-input").value;
+    startConfigSeconds = d*86400 + h*3600 + m*60 + s;
+    selectedTimer.remainingSeconds = startConfigSeconds;
+
+    // Anzeige aktualisieren mit useDays
+    el.textContent = formatTime(selectedTimer.remainingSeconds, selectedTimer.useDays);
+
+    const borderEnabled = document.getElementById("show-border-checkbox").checked;
+    if (borderEnabled) el.classList.add("timer-bordered");
+    else el.classList.remove("timer-bordered");
+    selectedTimer.hasBorder = borderEnabled;
+  }
+
+  closeSettings();
+}
+
+    // other functions (addTextBox, dragging, resize) unchanged...
+    function addTextBox() { /* ... unchanged ... */ }
+    function enableDragging(el) { /* ... unchanged ... */ }
+    function resizeBox(box) { /* ... unchanged ... */ }
+    function deleteSelectedBoxes() { /* ... unchanged ... */ }
+    function rgbToHex(rgb) { /* ... unchanged ... */ }
+    function selectTimer(timerObj) {
+      if (selectedTimer) {
+        selectedTimer.element.classList.remove('selected');
+      }
+      selectedTimer = timerObj;
+      timerObj.element.classList.add('selected');
+      // Button aktivieren
+      document.getElementById('timer-settings-btn').disabled = false;
+    }
+
+    let timers = [];
+    let selectedTimer = null;
+
+     function addTimer() {
+  if (timers.length) {
+    alert('Es existiert bereits ein Timer.');
+    return;
+  }
+  const timerObj = {
+    element: document.createElement('div'),
+    remainingSeconds: 0,
+    timerInterval: null,
+    timerRunning: false,
+    color: defaultFontColor,
+    countUp: false,
+    useDays: true      // neu
+  };
+  const el = timerObj.element;
+  el.className = 'text-box';
+  el.style.left       = '100px';
+  el.style.top        = '100px';
+  el.style.fontSize   = defaultFontSize;
+  el.style.color      = defaultFontColor;
+  el.style.fontWeight = defaultFontWeight;
+  el.textContent      = formatTime(0, timerObj.useDays);
+  enableDragging(el);
+  el.ondblclick = e => { e.stopPropagation(); selectTimer(timerObj); };
+
+  document.getElementById('overlay-frame').appendChild(el);
+  timers.push(timerObj);
+
+  selectTimer(timerObj);
+  document.getElementById('timer-settings-btn').disabled = false;
+}
+
+    function formatTime(totalSeconds, useDays) {
+  let h, m, s;
+  if (useDays) {
+    const d = Math.floor(totalSeconds / 86400);
+    h = Math.floor((totalSeconds % 86400) / 3600);
+    m = Math.floor((totalSeconds % 3600) / 60);
+    s = totalSeconds % 60;
+    const hh = String(h).padStart(2,'0');
+    const mm = String(m).padStart(2,'0');
+    const ss = String(s).padStart(2,'0');
+    return d > 0
+      ? `${d}d ${hh}:${mm}:${ss}`
+      : `${hh}:${mm}:${ss}`;
+  } else {
+    h = Math.floor(totalSeconds / 3600);
+    m = Math.floor((totalSeconds % 3600) / 60);
+    s = totalSeconds % 60;
+    const hh = String(h).padStart(2,'0');
+    const mm = String(m).padStart(2,'0');
+    const ss = String(s).padStart(2,'0');
+    return `${hh}:${mm}:${ss}`;
+  }
+}
+
+    function startTimer() {
+  if (!selectedTimer || selectedTimer.timerRunning) return;
+  selectedTimer.timerRunning   = true;
+  selectedTimer.startTimestamp = Date.now();
+  selectedTimer.startSeconds   = selectedTimer.remainingSeconds;
+
+  selectedTimer.timerInterval = setInterval(() => {
+    const now     = Date.now();
+    const elapsed = Math.floor((now - selectedTimer.startTimestamp) / 1000);
+    if (selectedTimer.countUp) {
+      selectedTimer.remainingSeconds = selectedTimer.startSeconds + elapsed;
+    } else {
+      selectedTimer.remainingSeconds = Math.max(0, selectedTimer.startSeconds - elapsed);
+    }
+    selectedTimer.element.textContent =
+      formatTime(selectedTimer.remainingSeconds, selectedTimer.useDays);
+    if (!selectedTimer.countUp && selectedTimer.remainingSeconds === 0) {
+      clearInterval(selectedTimer.timerInterval);
+      selectedTimer.timerRunning = false;
+    }
+  }, 1000);
+
+  setTimerInputsDisabled(true);
+  setCountDirectionDisabled(true);
+  // … ggf. live-Update im Modal …
+}
+
+   function pauseTimer() {
+  if (!selectedTimer || !selectedTimer.timerRunning) return;
+
+  clearInterval(selectedTimer.timerInterval);
+
+  const now = Date.now();
+  const elapsed = Math.floor((now - selectedTimer.startTimestamp) / 1000);
+
+  if (selectedTimer.countUp) {
+    selectedTimer.remainingSeconds = selectedTimer.startSeconds + elapsed;
+  } else {
+    selectedTimer.remainingSeconds = Math.max(0, selectedTimer.startSeconds - elapsed);
+  }
+
+  selectedTimer.timerRunning = false;
+  setTimerInputsDisabled(false);
+  setCountDirectionDisabled(false);
+
+  // ⏸️ Live-Update im Einstellungsfenster beenden
+  if (document.getElementById("settings-modal").style.display === "block" &&
+      document.getElementById("settings-modal").dataset.mode === "timer") {
+    clearInterval(settingsUpdateInterval);
+  }
+}
+    function resetTimer() {
+  if (!selectedTimer) return;
+  clearInterval(selectedTimer.timerInterval);
+  clearInterval(settingsUpdateInterval);
+
+  selectedTimer.remainingSeconds = 0;
+  selectedTimer.timerRunning     = false;
+  selectedTimer.element.textContent =
+    formatTime(0, selectedTimer.useDays);
+  selectedTimer.startSeconds = 0;
+
+  if (document.getElementById("settings-modal").style.display === "block" &&
+      document.getElementById("settings-modal").dataset.mode === "timer") {
+    document.getElementById("days-input").value    = 0;
+    document.getElementById("hours-input").value   = 0;
+    document.getElementById("minutes-input").value = 0;
+    document.getElementById("seconds-input").value = 0;
+  }
+
+  setTimerInputsDisabled(false);
+  setCountDirectionDisabled(false);
+}
+
+    document.addEventListener('keydown', e=>{ if(e.key==='Delete') deleteSelectedBoxes(); });
+    document.getElementById("count-up-checkbox").addEventListener("change", function() {
+  const downBox = document.getElementById("count-down-checkbox");
+  if (this.checked) {
+    downBox.checked = false;
+    if (selectedTimer && !selectedTimer.timerRunning) {
+      selectedTimer.countUp = true;
+    }
+  } else {
+    this.checked = true; // Verhindern, dass beide aus sind
+  }
+});
+
+document.getElementById("count-down-checkbox").addEventListener("change", function() {
+  const upBox = document.getElementById("count-up-checkbox");
+  if (this.checked) {
+    upBox.checked = false;
+    if (selectedTimer && !selectedTimer.timerRunning) {
+      selectedTimer.countUp = false;
+    }
+  } else {
+    this.checked = true;
+  }
+});
+    function setTimerInputsDisabled(disabled) {
+  const fields = ["days-input", "hours-input", "minutes-input", "seconds-input"];
+  fields.forEach(id => {
+    document.getElementById(id).disabled = disabled;
+  });
+}
+function setCountDirectionDisabled(disabled) {
+  document.getElementById("count-up-checkbox").disabled = disabled;
+  document.getElementById("count-down-checkbox").disabled = disabled;
+}a
+// 5) updateTimerFromSettings: Anzeige mit useDays updaten
+function updateTimerFromSettings() {
+  if (!selectedTimer) return;
+  const d = +document.getElementById('days-input').value;
+  const h = +document.getElementById('hours-input').value;
+  const m = +document.getElementById('minutes-input').value;
+  const s = +document.getElementById('seconds-input').value;
+  const newSeconds = d*86400 + h*3600 + m*60 + s;
+
+  selectedTimer.remainingSeconds = newSeconds;
+  selectedTimer.element.textContent =
+    formatTime(newSeconds, selectedTimer.useDays);
+
+  const border = document.getElementById('show-border-checkbox').checked;
+  if (border) selectedTimer.element.classList.add('timer-bordered');
+  else selectedTimer.element.classList.remove('timer-bordered');
+  selectedTimer.hasBorder = border;
+
+}
+
+
+function formatTime(totalSeconds, useDays) {
+  let h, m, s;
+  if (useDays) {
+    const d = Math.floor(totalSeconds / 86400);
+    h = Math.floor((totalSeconds % 86400) / 3600);
+    m = Math.floor((totalSeconds % 3600) / 60);
+    s = totalSeconds % 60;
+    const hh = h.toString().padStart(2, '0');
+    const mm = m.toString().padStart(2, '0');
+    const ss = s.toString().padStart(2, '0');
+    return d > 0
+      ? `${d}d ${hh}:${mm}:${ss}`
+      : `${hh}:${mm}:${ss}`;
+  } else {
+    h = Math.floor(totalSeconds / 3600);
+    m = Math.floor((totalSeconds % 3600) / 60);
+    s = totalSeconds % 60;
+    const hh = h.toString().padStart(2, '0');
+    const mm = m.toString().padStart(2, '0');
+    const ss = s.toString().padStart(2, '0');
+    return `${hh}:${mm}:${ss}`;
+  }
+}
+
+  </script>
+</body>
+</html>
